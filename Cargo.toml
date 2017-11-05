@@ -1,0 +1,6 @@
+[package]
+name = "duck_comp"
+version = "0.1.0"
+authors = ["Troels Irgens-Møller <troelsirgensmoeller@gmail.com>"]
+
+[dependencies]
