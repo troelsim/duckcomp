@@ -4,3 +4,9 @@ version = "0.1.0"
 authors = ["Troels Irgens-Møller <troelsirgensmoeller@gmail.com>"]
 
 [dependencies]
+vst2 = { git = "https://github.com/overdrivenpotato/rust-vst2" }
+time = "0.1"
+
+[lib]
+name = "duck_comp"
+crate-type = ["dylib"]
