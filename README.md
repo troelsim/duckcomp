@@ -2,6 +2,10 @@ A simple compressor VST using [overdrivenpotato's vst2 library](https://github.c
 
 This compressor has a fixed gain reduction (the `Range` parameter) instead of a traditional ratio control. When the sidechain signal is over the threshold, the signal is reduced by the given value, and the `Ratio` knob controls the sharpness of the sigmoid used to determine this.
 
+Sort of like an inverse gate.
+
+It gives an aggressive but consistent sound for ducking signals, sidechain pumping etc.
+
 The topology is feed-forward, and the detector is RMS.
 
 To build
