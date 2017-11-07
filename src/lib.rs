@@ -5,35 +5,62 @@ use vst2::buffer::AudioBuffer;
 
 type SamplePair = (f32, f32);
 
+const SAMPLERATE: f32 = 41400.;
+const RMS_FILTER_FACTOR: f32 = 1./(0.01*SAMPLERATE); // 1/(10 ms)
+
 struct DuckComp {
 //    buffers: Vec<VecDeque<SamplePair>>,
     attack: f32,
     release: f32,
     threshold: f32,
+    ratio: f32,
     makeup: f32,
-    Q: f32
+    range: f32,
+    Q: f32,
+    rms_filter_q: f32
 }
 
 impl Default for DuckComp {
     fn default() -> DuckComp{
-        DuckComp::new(0.3, 0.4, 0.1, 0.25)
+        DuckComp::new(0.03, 0.4, 1.0, 0.1, 1., 0.)
     }
 }
 
 impl DuckComp {
-    fn new(attack: f32, release: f32, threshold: f32, makeup: f32) -> DuckComp{
+    fn new(attack: f32, release: f32, threshold: f32, ratio: f32, makeup: f32, range: f32) -> DuckComp{
         // let mut buffer = VecDeque::
         DuckComp{
             attack: attack,
             release: release,
             threshold: threshold,
+            ratio: ratio,
             makeup: makeup,
-            Q: 0.0f32
+            range: range,
+            Q: 0.0f32,
+            rms_filter_q: 0f32
         }
     }
 
     fn d_q(&self, x: f32) -> f32 {
-        (self.attack*x - (self.attack + self.release)*self.Q)/100.
+        // Time parameters in seconds
+        let current_in = if x > self.Q {
+            (x - self.Q)/self.attack
+        }else{
+            0.
+        };
+        (current_in - self.Q/self.release)/SAMPLERATE
+    }
+
+    fn gain(&self) -> f32{
+        // 1./(1.+self.ratio*self.Q)
+        let arg = self.ratio*(self.Q - 0.5);
+        1. - (1. - self.range)*arg.exp()/(1. + arg.exp())
+    }
+
+    fn sidechain(&mut self, x: f32) -> f32 {
+        let squared = x*x;
+        self.rms_filter_q = squared*RMS_FILTER_FACTOR + self.rms_filter_q*(1.-RMS_FILTER_FACTOR);
+        (self.rms_filter_q.sqrt()/self.threshold - 1.).max(0.)
     }
 }
 
@@ -46,7 +73,7 @@ impl Plugin for DuckComp {
             version: 0001,
             inputs: 2,
             outputs: 2,
-            parameters: 4,
+            parameters: 6,
             category: Category::Effect,
 
             ..Default::default()
@@ -58,37 +85,45 @@ impl Plugin for DuckComp {
             0 => self.attack,
             1 => self.release,
             2 => self.threshold,
+            3 => self.ratio,
             4 => self.makeup,
+            5 => self.range,
             _ => 0.0f32
         }
     }
 
     fn get_parameter_text(&self, index: i32) -> String {
         match index{
-            0 => format!("{}", self.attack),
-            1 => format!("{}", self.release),
-            2 => format!("{}", self.threshold),
-            3 => format!("{}", self.makeup),
+            0 => format!("{:.2} ms", self.attack*1000.),
+            1 => format!("{:.2} ms", self.release*1000.),
+            2 => format!("-{:.2} dB", 20.*self.threshold.log10()),
+            3 => format!("1:{:.2}", self.ratio),
+            4 => format!("{:.2} dB", gain_to_db(self.makeup)),
+            5 => format!("{:.2} dB", gain_to_db(self.range)),
             _ => "".to_string()
         }
     }
 
     fn get_parameter_name(&self, index: i32) -> String {
         match index{
-            0 => "Attack".to_string(),
+            0 => "Attaczk".to_string(),
             1 => "Release".to_string(),
             2 => "Threshold".to_string(),
-            3 => "Make-up gain".to_string(),
+            3 => "Ratio".to_string(),
+            4 => "Make-up gain".to_string(),
+            5 => "Range".to_string(),
             _ => "".to_string()
         }
     }
 
     fn set_parameter(&mut self, index: i32, val: f32){
         match index{
-            0 => self.attack=val,
-            1 => self.release=val,
-            2 => self.threshold=val,
-            3 => self.makeup=val,
+            0 => self.attack=0.005 + val*(0.300 - 0.001),
+            1 => self.release=0.010 + val*(1. - 0.010),
+            2 => self.threshold=(10f32).powf(2.*(val-1.)),
+            3 => self.ratio=val*99. + 1.,
+            4 => self.makeup=db_to_gain(-12. + val*(20. - (-12.))),
+            5 => self.range=db_to_gain((val-1.)*60.),
             _ => ()
         }
     }
@@ -106,13 +141,11 @@ impl Plugin for DuckComp {
         };
 
         for ((left_in, right_in), (left_out, right_out)) in stereo_in.zip(stereo_out) {
-            let gain = (1.0f32 - self.Q).max(0f32);
-            *right_out = *right_in * gain;
-            *left_out = *left_in * gain;
-            let sidechain_signal: f32 = rectify(50. * self.threshold*0.5f32*(*left_out + *right_out));
+            let sidechain_signal = self.sidechain(0.5f32*(*left_in + *right_in));
             self.Q = self.Q + self.d_q(sidechain_signal);
-            *left_out = *left_out * 4. *self.makeup;
-            *right_out = *right_out * 4. *self.makeup;
+            let gain = self.gain();
+            *right_out = *right_in * gain * self.makeup;
+            *left_out = *left_in * gain * self.makeup;
         }
     }
 }
@@ -120,6 +153,14 @@ impl Plugin for DuckComp {
 fn rectify(x: f32) -> f32{
     x.abs().max(0.1f32)
     // (x.exp() + 1.0f32).ln()
+}
+
+fn db_to_gain(x: f32) -> f32{
+    (10f32).powf(x/20.)
+}
+
+fn gain_to_db(x: f32) -> f32 {
+    20.*x.log10()
 }
 
 plugin_main!(DuckComp);
