@@ -9,7 +9,6 @@ const SAMPLERATE: f32 = 41400.;
 const RMS_FILTER_FACTOR: f32 = 1./(0.01*SAMPLERATE); // 1/(10 ms)
 
 struct DuckComp {
-//    buffers: Vec<VecDeque<SamplePair>>,
     attack: f32,
     release: f32,
     threshold: f32,
@@ -28,7 +27,6 @@ impl Default for DuckComp {
 
 impl DuckComp {
     fn new(attack: f32, release: f32, threshold: f32, ratio: f32, makeup: f32, range: f32) -> DuckComp{
-        // let mut buffer = VecDeque::
         DuckComp{
             attack: attack,
             release: release,
