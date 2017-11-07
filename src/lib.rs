@@ -3,8 +3,6 @@
 use vst2::plugin::{Category, Info, Plugin};
 use vst2::buffer::AudioBuffer;
 
-type SamplePair = (f32, f32);
-
 const SAMPLERATE: f32 = 41400.;
 const RMS_FILTER_FACTOR: f32 = 1./(0.01*SAMPLERATE); // 1/(10 ms)
 
